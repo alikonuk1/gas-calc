@@ -1,6 +1,6 @@
 use std::io;
 use reqwest::Error;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::{Deserialize};
 
 #[derive(Deserialize)]
 struct CoinGeckoResponse {
@@ -17,18 +17,16 @@ struct MantleFeeEstimation {
     l2_gas_price: f64,
     l2_gas_used: u64,
     l1_gas_price: f64,
-    overhead: f64,
-    eth_to_mnt_ratio: f64,
+    l1_gas_used: u64,
 }
 
 impl MantleFeeEstimation {
-    fn new(l2_gas_price: f64, l2_gas_used: u64, l1_gas_price: f64, overhead: f64, eth_to_mnt_ratio: f64) -> Self {
+    fn new(l2_gas_price: f64, l2_gas_used: u64, l1_gas_price: f64, l1_gas_used: u64) -> Self {
         MantleFeeEstimation {
             l2_gas_price,
             l2_gas_used,
             l1_gas_price,
-            overhead,
-            eth_to_mnt_ratio,
+            l1_gas_used,
         }
     }
 
@@ -37,7 +35,7 @@ impl MantleFeeEstimation {
     }
 
     fn calculate_l1_rollup_fee(&self) -> f64 {
-        self.l1_gas_price * self.overhead * self.eth_to_mnt_ratio / 1_000_000_000.0
+        self.l1_gas_price * self.l1_gas_used as f64 / 1_000_000_000.0
     }
 
     fn calculate_total_fee_in_mnt(&self) -> f64 {
@@ -63,7 +61,7 @@ async fn main() -> Result<(), Error> {
     
     let eth_to_usd = conversion_response.ethereum.unwrap().usd;
     let mnt_to_usd = conversion_response.mantle.unwrap().usd;
-    let eth_to_mnt_ratio = eth_to_usd / mnt_to_usd;
+/*     let eth_to_mnt_ratio = eth_to_usd / mnt_to_usd; */
 
     if chain_selection == 1 {
         println!("Enter Ethereum gas price (in Gwei): ");
@@ -95,15 +93,16 @@ async fn main() -> Result<(), Error> {
         let l1_gas_price: f64 = input.trim().parse().expect("Please enter a valid number");
         input.clear();
 
-        println!("Enter overhead (a fixed overhead value): ");
+        println!("Enter L1 gas used: ");
         io::stdin().read_line(&mut input).expect("Failed to read line");
-        let overhead: f64 = input.trim().parse().expect("Please enter a valid number");
+        let l1_gas_used: u64 = input.trim().parse().expect("Please enter a valid number");
         input.clear();
-
-        let fee_estimate = MantleFeeEstimation::new(l2_gas_price, l2_gas_used, l1_gas_price, overhead, eth_to_mnt_ratio);
+        
+        let fee_estimate = MantleFeeEstimation::new(l2_gas_price, l2_gas_used, l1_gas_price, l1_gas_used);
         let total_fee = fee_estimate.calculate_total_fee_in_mnt();
         let total_fee_usd = total_fee * mnt_to_usd;
-        println!("Total Transaction Fee: {:.18} MNT (~${:.2} USD)", total_fee, total_fee_usd);
+        println!("Total Transaction Fee: {:.18} MNT", total_fee);
+        println!("(~${:.2} USD)", total_fee_usd);
     } else {
         println!("Invalid selection. Please run the program again.");
     }
