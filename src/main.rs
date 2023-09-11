@@ -1,5 +1,4 @@
 use rand::Rng;
-use reqwest::Error;
 use serde_derive::Deserialize;
 use std::io;
 
@@ -52,7 +51,6 @@ fn get_input(prompt: &str) -> Result<String, io::Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut input = String::new();
     let chain_selection: u8 = get_input("Select chain for gas calculation:\n1: Ethereum\n2: Mantle")
         .expect("Failed to read line")
         .parse()
@@ -88,15 +86,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()
         .expect("Please enter a valid number for Ethereum gas used");
 
+    let mut total_eth_fee_consumption = 0.0;
+    let mut total_usd_fee_consumption = 0.0;
+
     if chain_selection == 1 {
-        for _ in 0..days {
+        for day in 0..days {
             let gas_price = random_f64_in_range(min_gas_price, max_gas_price);
 
             let eth_fee = gas_price * eth_gas_used as f64 / 1_000_000_000.0;
             let eth_fee_usd = eth_fee * eth_to_usd;
-            println!("Total Transaction Fee: {:.18} ETH", eth_fee);
+            
+            total_eth_fee_consumption += eth_fee;
+            total_usd_fee_consumption += eth_fee_usd;
+
+            println!("Day {}: Total Transaction Fee: {:.18} ETH", day, eth_fee);
             println!("(~${:.2} USD)", eth_fee_usd);
         }
+        println!("\nTotal ETH fees over {} days: {:.18} ETH", days, total_eth_fee_consumption);
+        println!("Total USD equivalent: ${:.2}", total_usd_fee_consumption);
     } else if chain_selection == 2 {
         let l2_min_gas_price: f64 = get_input("Enter the minimum L2 gas price (in Gwei): ")
         .expect("Failed to read line")
@@ -113,18 +120,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()
         .expect("Please enter a valid number for L2 gas used");
 
-        for _ in 0..days {
+        for day in 0..days {
             let gas_price = random_f64_in_range(min_gas_price, max_gas_price);
-
             let l2_gas_price = random_f64_in_range(l2_min_gas_price, l2_max_gas_price);
 
             let fee_estimate =
                 L2FeeEstimation::new(l2_gas_price, l2_gas_used, gas_price, eth_gas_used);
             let total_fee = fee_estimate.calculate_total_fee_in_mnt();
             let total_fee_usd = total_fee * mnt_to_usd;
-            println!("Total Transaction Fee: {:.18} MNT", total_fee);
+            
+            total_eth_fee_consumption += total_fee;
+            total_usd_fee_consumption += total_fee_usd;
+
+            println!("Day {}: Total Transaction Fee: {:.18} MNT", day, total_fee);
             println!("(~${:.2} USD)", total_fee_usd);
         }
+
+        println!("\nTotal MNT fees over {} days: {:.18} MNT", days, total_eth_fee_consumption);
+        println!("Total USD equivalent: ${:.2}", total_usd_fee_consumption);
     } else {
         println!("Invalid selection. Please run the program again.");
         return Ok(());
