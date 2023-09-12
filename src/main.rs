@@ -30,9 +30,13 @@ impl L2FeeEstimation {
         }
     }
 
-    fn calculate_total_fee_in_mnt(&self) -> f64 {
-        (self.l2_gas_price * self.l2_gas_used as f64 + self.l1_gas_price * self.l1_gas_used as f64)
-            / 1_000_000_000.0
+    fn calculate_total_fee_in_mnt(&self, eth_to_mnt: f64) -> f64 {
+        let l2_fee_mnt = self.l2_gas_price * self.l2_gas_used as f64 / 1_000_000_000.0;
+
+        let l1_fee_eth = self.l1_gas_price * self.l1_gas_used as f64 / 1_000_000_000.0;
+        let l1_fee_mnt = l1_fee_eth * eth_to_mnt;
+
+        l2_fee_mnt + l1_fee_mnt
     }
 }
 
@@ -40,7 +44,6 @@ fn random_f64_in_range(min: f64, max: f64) -> f64 {
     let mut rng = rand::thread_rng();
     rng.gen_range(min..=max)
 }
-
 
 fn get_input(prompt: &str) -> Result<String, io::Error> {
     let mut input = String::new();
@@ -65,33 +68,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let eth_to_usd = conversion_response.ethereum.ok_or("Ethereum price not found")?.usd;
     let mnt_to_usd = conversion_response.mantle.ok_or("Mantle price not found")?.usd;
+    let eth_to_mnt = eth_to_usd / mnt_to_usd;
 
     let days: u64 = get_input("Enter the number of days for the simulation: ")
         .expect("Failed to read line")
         .parse()
         .expect("Please enter a valid number");
 
-    let min_gas_price: f64 = get_input("Enter the minimum gas price (in Gwei): ")
+    let l1_min_gas_price: f64 = get_input("Enter the minimum L1 gas price (in Gwei): ")
         .expect("Failed to read line")
         .parse()
         .expect("Please enter a valid number");
 
-    let max_gas_price: f64 = get_input("Enter the maximum gas price (in Gwei): ")
+    let l1_max_gas_price: f64 = get_input("Enter the maximum L1 gas price (in Gwei): ")
         .expect("Failed to read line")
         .parse()
         .expect("Please enter a valid number");
 
-    let eth_gas_used: u64 = get_input("Enter the Ethereum gas used: ")
+    let eth_gas_used: u64 = get_input("Enter the L1 gas used: ")
         .expect("Failed to read line")
         .parse()
-        .expect("Please enter a valid number for Ethereum gas used");
+        .expect("Please enter a valid number for L1 gas used");
 
     let mut total_eth_fee_consumption = 0.0;
     let mut total_usd_fee_consumption = 0.0;
 
     if chain_selection == 1 {
         for day in 0..days {
-            let gas_price = random_f64_in_range(min_gas_price, max_gas_price);
+            let gas_price = random_f64_in_range(l1_min_gas_price, l1_max_gas_price);
 
             let eth_fee = gas_price * eth_gas_used as f64 / 1_000_000_000.0;
             let eth_fee_usd = eth_fee * eth_to_usd;
@@ -121,21 +125,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Please enter a valid number for L2 gas used");
 
         for day in 0..days {
-            let gas_price = random_f64_in_range(min_gas_price, max_gas_price);
+            let gas_price = random_f64_in_range(l1_min_gas_price, l1_max_gas_price);
             let l2_gas_price = random_f64_in_range(l2_min_gas_price, l2_max_gas_price);
 
             let fee_estimate =
                 L2FeeEstimation::new(l2_gas_price, l2_gas_used, gas_price, eth_gas_used);
-            let total_fee = fee_estimate.calculate_total_fee_in_mnt();
+            let total_fee = fee_estimate.calculate_total_fee_in_mnt(eth_to_mnt);
             let total_fee_usd = total_fee * mnt_to_usd;
-            
+
             total_eth_fee_consumption += total_fee;
             total_usd_fee_consumption += total_fee_usd;
 
             println!("Day {}: Total Transaction Fee: {:.18} MNT", day, total_fee);
             println!("(~${:.2} USD)", total_fee_usd);
         }
-
+    
         println!("\nTotal MNT fees over {} days: {:.18} MNT", days, total_eth_fee_consumption);
         println!("Total USD equivalent: ${:.2}", total_usd_fee_consumption);
     } else {
